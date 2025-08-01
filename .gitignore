@@ -1,0 +1,10 @@
+# Zig build artifacts
+zig-cache/
+zig-out/
+
+# Editor/IDE files
+.vscode/
+.vs/
+
+# OS-specific files
+.DS_Store
