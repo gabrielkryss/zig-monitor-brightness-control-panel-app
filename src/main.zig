@@ -1,4 +1,5 @@
 const std = @import("std");
+const dvui = @import("dvui");
 
 const win = @cImport({
     @cInclude("windows.h");
@@ -87,4 +88,32 @@ pub fn main() !void {
         const err = win.GetLastError();
         std.debug.print("Failed to enumerate monitors. Error code: {}\n", .{err});
     }
+
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // const allocator = gpa.allocator();
+    //
+    // var app = try dvui.App.init(allocator, .{
+    //     .backend = dvui.backends.dx11,
+    //     .title = "Monitor Brightness Control",
+    //     .width = 800,
+    //     .height = 600,
+    // });
+    // defer app.deinit();
+    //
+    // while (try app.beginFrame()) {
+    //     var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{});
+    //     defer vbox.deinit();
+    //
+    //     dvui.label(@src(), "Monitor Brightness Control", .{}, .{});
+    //     dvui.separator();
+    //
+    //     for (0..3) |i| {
+    //         var hbox = dvui.box(@src(), .{ .dir = .horizontal }, .{ .id_extra = i });
+    //         defer hbox.deinit();
+    //
+    //         dvui.label(@src(), "Monitor {d}", .{i}, .{});
+    //         var brightness: f32 = 0.5;
+    //         _ = dvui.sliderEntry(@src(), "Brightness", .{ .value = &brightness, .min = 0.0, .max = 1.0 }, .{});
+    //     }
+    // }
 }

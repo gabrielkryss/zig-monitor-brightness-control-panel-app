@@ -4,6 +4,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // const dvui_dep = b.dependency("dvui", .{});
+
     // Use b.path() to create a LazyPath from a string
     const root_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -12,8 +14,11 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
 
+    // ✅ Add dvui to the root module
+    // root_mod.addImport("dvui", dvui_dep.module("root"));
+
     const exe = b.addExecutable(.{
-        .name = "monitor_enum",
+        .name = "monitor_brightness_control_panel_app",
         .root_module = root_mod,
     });
 

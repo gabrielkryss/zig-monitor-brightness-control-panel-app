@@ -1,0 +1,12 @@
+.{
+  .fingerprint = 0x651235b8370b46ce,
+  .name = .monitorBrightnessControlPanelApp,
+  .version = "0.1.0",
+  .paths = []string{ "." },
+  .dependencies = .{
+    .dvui = .{
+      .url = "https://github.com/david-vanderson/dvui/archive/main.tar.gz",
+      .hash = "dvui-0.4.0-dev-AQFJmQm60wARx9JP8jf5yZ-4bRCzBmQcTgn9DkzyI82_",
+    },
+  },
+}
