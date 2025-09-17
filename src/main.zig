@@ -1,30 +1,28 @@
 const std = @import("std");
 
-// Unified import block
 const win = @cImport({
     @cInclude("windows.h");
     @cInclude("physicalmonitorenumerationapi.h");
-    @cInclude("highlevelmonitorconfigurationapi.h");
+    @cInclude("lowlevelmonitorconfigurationapi.h");
 });
 
-// Callback function type expected by EnumDisplayMonitors
 const MONITORENUMPROC = fn (
     hMonitor: win.HMONITOR,
     hdc: win.HDC,
     lprcMonitor: [*c]win.RECT,
     dwData: win.LPARAM,
-) callconv(.C) c_int;
+) callconv(.c) c_int;
 
-// Callback implementation
 fn monitorEnumProc(
     hMonitor: win.HMONITOR,
     _: win.HDC,
     _: [*c]win.RECT,
     _: win.LPARAM,
-) callconv(.C) c_int {
+) callconv(.c) c_int {
     var monitor_count: u32 = 0;
     if (win.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, &monitor_count) == 0) {
-        std.debug.print("  Failed to get physical monitor count.\n", .{});
+        const err = win.GetLastError();
+        std.debug.print("  Failed to get physical monitor count. Error code: {}\n", .{err});
         return 1;
     }
 
@@ -35,12 +33,14 @@ fn monitorEnumProc(
     defer std.heap.page_allocator.free(monitors);
 
     if (win.GetPhysicalMonitorsFromHMONITOR(hMonitor, monitor_count, monitors.ptr) == 0) {
-        std.debug.print("  Failed to get physical monitors.\n", .{});
+        const err = win.GetLastError();
+        std.debug.print("  Failed to get physical monitors. Error code: {}\n", .{err});
         return 1;
     }
 
     for (monitors[0..monitor_count]) |monitor| {
-        const utf8_desc = std.unicode.utf16LeToUtf8Alloc(std.heap.page_allocator, &monitor.szPhysicalMonitorDescription) catch {
+        const desc_slice = monitor.szPhysicalMonitorDescription[0..];
+        const utf8_desc = std.unicode.utf16LeToUtf8Alloc(std.heap.page_allocator, desc_slice) catch {
             std.debug.print("  Failed to convert monitor description to UTF-8.\n", .{});
             continue;
         };
@@ -48,30 +48,25 @@ fn monitorEnumProc(
 
         std.debug.print("Monitor: {s}\n", .{utf8_desc});
 
-        var caps: u32 = 0;
-        var colorTemps: u32 = 0;
+        const VCP_BRIGHTNESS: u8 = 0x10;
+        var current_value: u32 = 0;
+        var max_value: u32 = 0;
+        var vcp_type: win.MC_VCP_CODE_TYPE = undefined;
 
-        if (win.GetMonitorCapabilities(monitor.hPhysicalMonitor, &caps, &colorTemps) == 0) {
-            std.debug.print("  Failed to get monitor capabilities.\n", .{});
-            continue;
+        if (win.GetVCPFeatureAndVCPFeatureReply(
+            monitor.hPhysicalMonitor,
+            VCP_BRIGHTNESS,
+            &vcp_type,
+            &current_value,
+            &max_value,
+        ) != 0) {
+            std.debug.print("  VCP Brightness: current={d}, max={d}, type={d}\n", .{
+                current_value, max_value, vcp_type,
+            });
+        } else {
+            const err = win.GetLastError();
+            std.debug.print("  Failed to get VCP brightness. Error code: {}\n", .{err});
         }
-
-        const supportsBrightness = (caps & win.MC_CAPS_BRIGHTNESS) != 0;
-        if (!supportsBrightness) {
-            std.debug.print("  Brightness control not supported.\n", .{});
-            continue;
-        }
-
-        var min: u32 = 0;
-        var cur: u32 = 0;
-        var max: u32 = 0;
-
-        if (win.GetMonitorBrightness(monitor.hPhysicalMonitor, &min, &cur, &max) == 0) {
-            std.debug.print("  Failed to get brightness values.\n", .{});
-            continue;
-        }
-
-        std.debug.print("  Brightness supported: min={d}, current={d}, max={d}\n", .{ min, cur, max });
     }
 
     _ = win.DestroyPhysicalMonitors(monitor_count, monitors.ptr);
@@ -89,6 +84,7 @@ pub fn main() !void {
     );
 
     if (success == 0) {
-        std.debug.print("Failed to enumerate monitors.\n", .{});
+        const err = win.GetLastError();
+        std.debug.print("Failed to enumerate monitors. Error code: {}\n", .{err});
     }
 }

@@ -1,30 +1,29 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const allocator = b.allocator;
-    const windows_sdk_path = std.process.getEnvVarOwned(allocator, "ZIG_WINDOWS_SDK_PATH") catch {
-        std.debug.print("❌ ZIG_WINDOWS_SDK_PATH is not set.\n", .{});
-        return;
-    };
-    std.debug.print("✅ ZIG_WINDOWS_SDK_PATH = {s}\n", .{windows_sdk_path});
-
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable(.{
-        .name = "monitor_brightness_control_panel",
-        .root_source_file = .{ .cwd_relative = "src/main.zig" },
+    // Use b.path() to create a LazyPath from a string
+    const root_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
 
+    const exe = b.addExecutable(.{
+        .name = "monitor_enum",
+        .root_module = root_mod,
+    });
+
     exe.linkSystemLibrary("user32");
-    exe.linkSystemLibrary("gdi32");
     exe.linkSystemLibrary("dxva2");
+
+    // exe.setSubsystem(.Console, .{});
 
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
-    b.step("run", "Run the monitor brightness control panel").dependOn(&run_cmd.step);
+    b.default_step.dependOn(&run_cmd.step);
 }
