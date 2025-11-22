@@ -57,7 +57,7 @@ pub fn AppInit(win: *dvui.Window) !void {
     orig_content_scale = win.content_scale;
     //try dvui.addFont("NOTO", @embedFile("../src/fonts/NotoSansKR-Regular.ttf"), null);
 
-    // const allocator = std.heap.page_allocator;
+    const allocator = std.heap.page_allocator;
 
     const callback = struct {
         fn monitorEnum(hMonitor: ?gdi.HMONITOR, _: ?gdi.HDC, _: ?*foundation.RECT, _: isize) callconv(.c) foundation.BOOL {
@@ -69,7 +69,7 @@ pub fn AppInit(win: *dvui.Window) !void {
                 if (display.GetNumberOfPhysicalMonitorsFromHMONITOR(monitor, &count) != 0) {
                     std.log.info("Physical monitors: {}", .{count});
 
-                    var monitors = std.heap.page_allocator.alloc(display.PHYSICAL_MONITOR, count) catch {
+                    var monitors = allocator.alloc(display.PHYSICAL_MONITOR, count) catch {
                         std.log.err("Allocation failed", .{});
                         return win32.zig.TRUE;
                     };
@@ -82,7 +82,7 @@ pub fn AppInit(win: *dvui.Window) !void {
                             const name_len = std.mem.indexOfScalar(u16, raw_name, 0) orelse raw_name.len;
                             const wide_name = raw_name[0..name_len];
 
-                            const name_utf8 = utf16ToUtf8(std.heap.page_allocator, wide_name) catch {
+                            const name_utf8 = utf16ToUtf8(allocator, wide_name) catch {
                                 std.log.warn("Name conversion failed", .{});
                                 continue;
                             };
@@ -90,13 +90,54 @@ pub fn AppInit(win: *dvui.Window) !void {
 
                             std.log.info("Name: {s}", .{name_utf8});
 
-                            var min: u32 = 0;
-                            var cur: u32 = 0;
-                            var max: u32 = 0;
-                            if (display.GetMonitorBrightness(pm.hPhysicalMonitor, &min, &cur, &max) != 0) {
-                                std.log.info("Brightness: min={}, cur={}, max={}", .{ min, cur, max });
+                            // var min: u32 = 0;
+                            // var cur: u32 = 0;
+                            // var max: u32 = 0;
+                            // if (display.GetMonitorBrightness(pm.hPhysicalMonitor, &min, &cur, &max) != 0) {
+                            //     std.log.info("Brightness: min={}, cur={}, max={}", .{ min, cur, max });
+                            // } else {
+                            //     std.log.warn("Brightness: Not supported", .{});
+                            // }
+
+                            var length: u32 = 0;
+                            if (display.GetCapabilitiesStringLength(hMonitor, &length) == 0) {
+                                const err = foundation.GetLastError();
+                                std.log.err("GetCapabilitiesStringLength failed. Error={d}", .{err});
+                            }
+
+                            const buf = allocator.allocSentinel(u8, length, 0) catch {
+                                std.log.err("Allocation failed", .{});
+                                return 0;
+                            };
+                            defer allocator.free(buf);
+
+                            if (display.CapabilitiesRequestAndCapabilitiesReply(hMonitor, buf.ptr, length) == 0) {
+                                const err = foundation.GetLastError();
+                                std.log.err("CapabilitiesRequestAndCapabilitiesReply failed. Error={d}", .{err});
+                            }
+
+                            const VCP_BRIGHTNESS: u8 = 0x10;
+
+                            var vcp_type: display.MC_VCP_CODE_TYPE = undefined;
+                            var current_value: u32 = 0;
+                            var max_value: u32 = 0;
+
+                            const ok: i32 = display.GetVCPFeatureAndVCPFeatureReply(
+                                hMonitor,
+                                VCP_BRIGHTNESS,
+                                &vcp_type,
+                                &current_value,
+                                &max_value,
+                            );
+
+                            if (ok != 0) {
+                                std.log.info(
+                                    "VCP Brightness: current={d}, max={d}, type={d}\n",
+                                    .{ current_value, max_value, @intFromEnum(vcp_type) },
+                                );
                             } else {
-                                std.log.warn("Brightness: Not supported", .{});
+                                const err = foundation.GetLastError();
+                                std.log.err("Failed to get VCP brightness. Error code: {d}\n", .{err});
                             }
 
                             _ = display.DestroyPhysicalMonitor(pm.hPhysicalMonitor);
@@ -322,4 +363,94 @@ test "open example window" {
 //         }
 //     };
 //     try std.testing.fuzz(Context{}, Context.testOne, .{});
+// }
+
+// const std = @import("std");
+// const win = @cImport({
+//     @cInclude("windows.h");
+//     @cInclude("physicalmonitorenumerationapi.h");
+//     @cInclude("lowlevelmonitorconfigurationapi.h");
+// });
+//
+// const MONITORENUMPROC = fn (
+//     hMonitor: win.HMONITOR,
+//     hdc: win.HDC,
+//     lprcMonitor: [*c]win.RECT,
+//     dwData: win.LPARAM,
+// ) callconv(.c) c_int;
+//
+// fn monitorEnumProc(
+//     hMonitor: win.HMONITOR,
+//     _: win.HDC,
+//     _: [*c]win.RECT,
+//     _: win.LPARAM,
+// ) callconv(.c) c_int {
+//     var monitor_count: u32 = 0;
+//     if (win.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, &monitor_count) == 0) {
+//         const err = win.GetLastError();
+//         std.debug.print("  Failed to get physical monitor count. Error code: {}\n", .{err});
+//         return 1;
+//     }
+//
+//     const monitors = std.heap.page_allocator.alloc(win.PHYSICAL_MONITOR, monitor_count) catch {
+//         std.debug.print("  Failed to allocate monitor array.\n", .{});
+//         return 1;
+//     };
+//     defer std.heap.page_allocator.free(monitors);
+//
+//     if (win.GetPhysicalMonitorsFromHMONITOR(hMonitor, monitor_count, monitors.ptr) == 0) {
+//         const err = win.GetLastError();
+//         std.debug.print("  Failed to get physical monitors. Error code: {}\n", .{err});
+//         return 1;
+//     }
+//
+//     for (monitors[0..monitor_count]) |monitor| {
+//         const desc_slice = monitor.szPhysicalMonitorDescription[0..];
+//         const utf8_desc = std.unicode.utf16LeToUtf8Alloc(std.heap.page_allocator, desc_slice) catch {
+//             std.debug.print("  Failed to convert monitor description to UTF-8.\n", .{});
+//             continue;
+//         };
+//         defer std.heap.page_allocator.free(utf8_desc);
+//
+//         std.debug.print("Monitor: {s}\n", .{utf8_desc});
+//
+//         const VCP_BRIGHTNESS: u8 = 0x10;
+//         var current_value: u32 = 0;
+//         var max_value: u32 = 0;
+//         var vcp_type: win.MC_VCP_CODE_TYPE = undefined;
+//
+//         if (win.GetVCPFeatureAndVCPFeatureReply(
+//             monitor.hPhysicalMonitor,
+//             VCP_BRIGHTNESS,
+//             &vcp_type,
+//             &current_value,
+//             &max_value,
+//         ) != 0) {
+//             std.debug.print("  VCP Brightness: current={d}, max={d}, type={d}\n", .{
+//                 current_value, max_value, vcp_type,
+//             });
+//         } else {
+//             const err = win.GetLastError();
+//             std.debug.print("  Failed to get VCP brightness. Error code: {}\n", .{err});
+//         }
+//     }
+//
+//     _ = win.DestroyPhysicalMonitors(monitor_count, monitors.ptr);
+//     return 1;
+// }
+//
+// pub fn main() !void {
+//     std.debug.print("Enumerating connected monitors...\n", .{});
+//
+//     const success = win.EnumDisplayMonitors(
+//         null,
+//         null,
+//         monitorEnumProc,
+//         0,
+//     );
+//
+//     if (success == 0) {
+//         const err = win.GetLastError();
+//         std.debug.print("Failed to enumerate monitors. Error code: {}\n", .{err});
+//     }
 // }
