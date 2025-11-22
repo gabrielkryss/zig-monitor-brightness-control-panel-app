@@ -123,10 +123,25 @@ pub fn build(b: *std.Build) void {
     // installation directory rather than directly from within the cache directory.
     run_cmd.step.dependOn(b.getInstallStep());
 
+    const run_debug_step = b.step("run-debug", "Run the app under raddbg");
+
+    // Create a system command that runs raddbg with the exe
+    const run_debug_cmd = b.addSystemCommand(&[_][]const u8{
+        "raddbg",
+    });
+
+    // Append the exe artifact as an argument
+    run_debug_cmd.addArtifactArg(exe);
+
+    // Ensure exe is installed first
+    run_debug_cmd.step.dependOn(b.getInstallStep());
+    run_debug_step.dependOn(&run_debug_cmd.step);
+
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
     if (b.args) |args| {
         run_cmd.addArgs(args);
+        run_debug_cmd.addArgs(args);
     }
 
     // Creates an executable that will run `test` blocks from the provided module.
