@@ -91,42 +91,20 @@ pub fn AppInit(win: *dvui.Window) !void {
 
                             std.log.info("Name: {s}", .{name_utf8});
 
-                            // var min: u32 = 0;
-                            // var cur: u32 = 0;
-                            // var max: u32 = 0;
-                            // if (display.GetMonitorBrightness(pm.hPhysicalMonitor, &min, &cur, &max) != 0) {
-                            //     std.log.info("Brightness: min={}, cur={}, max={}", .{ min, cur, max });
-                            // } else {
-                            //     std.log.warn("Brightness: Not supported", .{});
-                            // }
+                            var min: u32 = 0;
+                            var cur: u32 = 0;
+                            var max: u32 = 0;
+                            if (display.GetMonitorBrightness(pm.hPhysicalMonitor, &min, &cur, &max) != 0) {
+                                std.log.info("Brightness: min={}, cur={}, max={}", .{ min, cur, max });
+                            } else {
+                                std.log.warn("Brightness: Not supported", .{});
+                            }
 
                             var length: u32 = 0;
                             if (display.GetCapabilitiesStringLength(pm.hPhysicalMonitor, &length) == 0) {
                                 const err = foundation.GetLastError();
                                 std.log.err("GetCapabilitiesStringLength failed. Error={d}", .{err});
                             }
-                            //         // --- Capabilities string query ---
-                            //         var length: u32 = 0;
-                            //         if (win.GetCapabilitiesStringLength(monitor.hPhysicalMonitor, &length) != 0) {
-                            //             var buf = std.heap.page_allocator.alloc(u8, length) catch {
-                            //                 std.log.err("Allocation failed", .{});
-                            //                 return 0;
-                            //             };
-                            //             defer std.heap.page_allocator.free(buf);
-                            //
-                            //             if (win.CapabilitiesRequestAndCapabilitiesReply(monitor.hPhysicalMonitor, buf.ptr, length) != 0) {
-                            //                 // Capabilities string is ASCII, null-terminated
-                            //                 const nul_idx = std.mem.indexOfScalar(u8, buf, 0) orelse buf.len;
-                            //                 const caps_str = buf[0..nul_idx];
-                            //                 std.debug.print("  Capabilities string: {s}\n", .{caps_str});
-                            //             } else {
-                            //                 const err = win.GetLastError();
-                            //                 std.debug.print("  CapabilitiesRequestAndCapabilitiesReply failed. Error={d}\n", .{err});
-                            //             }
-                            //         } else {
-                            //             const err = win.GetLastError();
-                            //             std.debug.print("  GetCapabilitiesStringLength failed. Error={d}\n", .{err});
-                            //         }
 
                             const buf = allocator.allocSentinel(u8, length, 0) catch {
                                 std.log.err("Allocation failed", .{});
