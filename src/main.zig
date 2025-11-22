@@ -105,6 +105,28 @@ pub fn AppInit(win: *dvui.Window) !void {
                                 const err = foundation.GetLastError();
                                 std.log.err("GetCapabilitiesStringLength failed. Error={d}", .{err});
                             }
+                            //         // --- Capabilities string query ---
+                            //         var length: u32 = 0;
+                            //         if (win.GetCapabilitiesStringLength(monitor.hPhysicalMonitor, &length) != 0) {
+                            //             var buf = std.heap.page_allocator.alloc(u8, length) catch {
+                            //                 std.log.err("Allocation failed", .{});
+                            //                 return 0;
+                            //             };
+                            //             defer std.heap.page_allocator.free(buf);
+                            //
+                            //             if (win.CapabilitiesRequestAndCapabilitiesReply(monitor.hPhysicalMonitor, buf.ptr, length) != 0) {
+                            //                 // Capabilities string is ASCII, null-terminated
+                            //                 const nul_idx = std.mem.indexOfScalar(u8, buf, 0) orelse buf.len;
+                            //                 const caps_str = buf[0..nul_idx];
+                            //                 std.debug.print("  Capabilities string: {s}\n", .{caps_str});
+                            //             } else {
+                            //                 const err = win.GetLastError();
+                            //                 std.debug.print("  CapabilitiesRequestAndCapabilitiesReply failed. Error={d}\n", .{err});
+                            //             }
+                            //         } else {
+                            //             const err = win.GetLastError();
+                            //             std.debug.print("  GetCapabilitiesStringLength failed. Error={d}\n", .{err});
+                            //         }
 
                             const buf = allocator.allocSentinel(u8, length, 0) catch {
                                 std.log.err("Allocation failed", .{});
@@ -116,6 +138,9 @@ pub fn AppInit(win: *dvui.Window) !void {
                                 const err = foundation.GetLastError();
                                 std.log.err("CapabilitiesRequestAndCapabilitiesReply failed. Error={d}", .{err});
                             }
+                            const nul_idx = std.mem.indexOfScalar(u8, buf, 0) orelse buf.len;
+                            const caps_str = buf[0..nul_idx];
+                            std.log.info("Capabilities string: {s}", .{caps_str});
 
                             const VCP_BRIGHTNESS: u8 = 0x10;
 
