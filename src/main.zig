@@ -6,6 +6,7 @@ const win32 = @import("zigwin32");
 const gdi = win32.graphics.gdi; // For EnumDisplayMonitors
 const foundation = win32.foundation; // For RECT, BOOL
 const display = win32.devices.display; // For monitor brightness APIs
+const system = @import("zigwin32").system; // For Sleep
 const zig = win32.zig; // For TRUE
 
 fn utf16ToUtf8(allocator: std.mem.Allocator, wide: []const u16) ![]u8 {
@@ -100,7 +101,7 @@ pub fn AppInit(win: *dvui.Window) !void {
                             // }
 
                             var length: u32 = 0;
-                            if (display.GetCapabilitiesStringLength(hMonitor, &length) == 0) {
+                            if (display.GetCapabilitiesStringLength(pm.hPhysicalMonitor, &length) == 0) {
                                 const err = foundation.GetLastError();
                                 std.log.err("GetCapabilitiesStringLength failed. Error={d}", .{err});
                             }
@@ -111,7 +112,7 @@ pub fn AppInit(win: *dvui.Window) !void {
                             };
                             defer allocator.free(buf);
 
-                            if (display.CapabilitiesRequestAndCapabilitiesReply(hMonitor, buf.ptr, length) == 0) {
+                            if (display.CapabilitiesRequestAndCapabilitiesReply(pm.hPhysicalMonitor, buf.ptr, length) == 0) {
                                 const err = foundation.GetLastError();
                                 std.log.err("CapabilitiesRequestAndCapabilitiesReply failed. Error={d}", .{err});
                             }
@@ -123,7 +124,7 @@ pub fn AppInit(win: *dvui.Window) !void {
                             var max_value: u32 = 0;
 
                             const ok: i32 = display.GetVCPFeatureAndVCPFeatureReply(
-                                hMonitor,
+                                pm.hPhysicalMonitor,
                                 VCP_BRIGHTNESS,
                                 &vcp_type,
                                 &current_value,
@@ -139,6 +140,27 @@ pub fn AppInit(win: *dvui.Window) !void {
                                 const err = foundation.GetLastError();
                                 std.log.err("Failed to get VCP brightness. Error code: {d}\n", .{err});
                             }
+
+                            std.log.info("Current brightness={d}, max={d}", .{ current_value, max_value });
+
+                            // Increase brightness by 20 (clamped to max)
+                            const new_value: u32 = if (current_value + 120 > max_value) max_value else current_value + 20;
+
+                            if (display.SetVCPFeature(pm.hPhysicalMonitor, VCP_BRIGHTNESS, new_value) == 0) {
+                                const err = foundation.GetLastError();
+                                std.log.err("Failed to set brightness. Error={d}", .{err});
+                            }
+                            std.log.info("Brightness temporarily set to {d}", .{new_value});
+
+                            // Sleep for 2 seconds so you can see the change
+                            _ = system.threading.Sleep(2000);
+
+                            // Restore original brightness
+                            if (display.SetVCPFeature(pm.hPhysicalMonitor, VCP_BRIGHTNESS, current_value) == 0) {
+                                const err = foundation.GetLastError();
+                                std.log.err("Failed to restore brightness. Error={d}", .{err});
+                            }
+                            std.log.info("Brightness restored to {d}", .{current_value});
 
                             _ = display.DestroyPhysicalMonitor(pm.hPhysicalMonitor);
                         }
@@ -405,8 +427,10 @@ test "open example window" {
 //     }
 //
 //     for (monitors[0..monitor_count]) |monitor| {
+//         // Convert monitor description
 //         const desc_slice = monitor.szPhysicalMonitorDescription[0..];
-//         const utf8_desc = std.unicode.utf16LeToUtf8Alloc(std.heap.page_allocator, desc_slice) catch {
+//         const nul_index = std.mem.indexOfScalar(u16, desc_slice, 0) orelse desc_slice.len;
+//         const utf8_desc = std.unicode.utf16LeToUtf8Alloc(std.heap.page_allocator, desc_slice[0..nul_index]) catch {
 //             std.debug.print("  Failed to convert monitor description to UTF-8.\n", .{});
 //             continue;
 //         };
@@ -414,6 +438,30 @@ test "open example window" {
 //
 //         std.debug.print("Monitor: {s}\n", .{utf8_desc});
 //
+//         // --- Capabilities string query ---
+//         var length: u32 = 0;
+//         if (win.GetCapabilitiesStringLength(monitor.hPhysicalMonitor, &length) != 0) {
+//             var buf = std.heap.page_allocator.alloc(u8, length) catch {
+//                 std.log.err("Allocation failed", .{});
+//                 return 0;
+//             };
+//             defer std.heap.page_allocator.free(buf);
+//
+//             if (win.CapabilitiesRequestAndCapabilitiesReply(monitor.hPhysicalMonitor, buf.ptr, length) != 0) {
+//                 // Capabilities string is ASCII, null-terminated
+//                 const nul_idx = std.mem.indexOfScalar(u8, buf, 0) orelse buf.len;
+//                 const caps_str = buf[0..nul_idx];
+//                 std.debug.print("  Capabilities string: {s}\n", .{caps_str});
+//             } else {
+//                 const err = win.GetLastError();
+//                 std.debug.print("  CapabilitiesRequestAndCapabilitiesReply failed. Error={d}\n", .{err});
+//             }
+//         } else {
+//             const err = win.GetLastError();
+//             std.debug.print("  GetCapabilitiesStringLength failed. Error={d}\n", .{err});
+//         }
+//
+//         // --- Brightness query ---
 //         const VCP_BRIGHTNESS: u8 = 0x10;
 //         var current_value: u32 = 0;
 //         var max_value: u32 = 0;
@@ -426,13 +474,32 @@ test "open example window" {
 //             &current_value,
 //             &max_value,
 //         ) != 0) {
-//             std.debug.print("  VCP Brightness: current={d}, max={d}, type={d}\n", .{
-//                 current_value, max_value, vcp_type,
-//             });
+//             std.debug.print("  VCP Brightness: current={d}, max={d}, type={d}\n", .{ current_value, max_value, vcp_type });
 //         } else {
 //             const err = win.GetLastError();
 //             std.debug.print("  Failed to get VCP brightness. Error code: {}\n", .{err});
 //         }
+//
+//         std.debug.print("  Current brightness={d}, max={d}\n", .{ current_value, max_value });
+//
+//         // Increase brightness by 100 (clamped to max)
+//         const new_value: u32 = if (100 > max_value) max_value else current_value + 20;
+//
+//         if (win.SetVCPFeature(monitor.hPhysicalMonitor, VCP_BRIGHTNESS, new_value) == 0) {
+//             const err = win.GetLastError();
+//             std.debug.print("  Failed to set brightness. Error={d}\n", .{err});
+//         }
+//         std.debug.print("  Brightness temporarily set to {d}\n", .{new_value});
+//
+//         // Sleep for 2 seconds so you can see the change
+//         _ = win.Sleep(2000);
+//
+//         // Restore original brightness
+//         if (win.SetVCPFeature(monitor.hPhysicalMonitor, VCP_BRIGHTNESS, current_value) == 0) {
+//             const err = win.GetLastError();
+//             std.debug.print("  Failed to restore brightness. Error={d}\n", .{err});
+//         }
+//         std.debug.print("  Brightness restored to {d}\n", .{current_value});
 //     }
 //
 //     _ = win.DestroyPhysicalMonitors(monitor_count, monitors.ptr);
