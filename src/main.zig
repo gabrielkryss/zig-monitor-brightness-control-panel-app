@@ -52,6 +52,25 @@ var orig_content_scale: f32 = 1.0;
 var warn_on_quit: bool = false;
 var warn_on_quit_closing: bool = false;
 
+// Dummy monitor data
+const Monitor = struct {
+    name: []const u8,
+    manufacturer: []const u8,
+    supports_brightness: bool,
+    brightness: f32,
+};
+
+var monitorsDummyData = [_]Monitor{
+    .{ .name = "Main Display", .manufacturer = "Dell", .supports_brightness = true, .brightness = 50 },
+    .{ .name = "Left Display", .manufacturer = "LG", .supports_brightness = true, .brightness = 70 },
+    .{ .name = "Right Display", .manufacturer = "Samsung", .supports_brightness = false, .brightness = 0 },
+    .{ .name = "Top Display", .manufacturer = "HP", .supports_brightness = true, .brightness = 30 },
+    .{ .name = "Projector", .manufacturer = "Epson", .supports_brightness = false, .brightness = 0 },
+};
+
+var selected: [5]bool = .{false} ** 5;
+var global_brightness: f32 = 50;
+
 // Runs before the first frame, after backend and dvui.Window.init()
 // - runs between win.begin()/win.end()
 pub fn AppInit(win: *dvui.Window) !void {
@@ -309,6 +328,59 @@ pub fn frame() !dvui.App.Result {
 
     // look at demo() for examples of dvui widgets, shows in a floating window
     dvui.Examples.demo();
+
+    // List of monitors
+    for (monitorsDummyData, 0..) |m, i| {
+        var row = dvui.box(@src(), .{ .dir = .horizontal }, .{ .expand = .horizontal, .id_extra = i });
+        defer row.deinit();
+
+        if (m.supports_brightness) {
+            _ = dvui.checkbox(@src(), &selected[i], m.name, .{ .id_extra = i });
+        } else {
+            dvui.label(@src(), "{s}", .{m.name}, .{ .id_extra = i });
+            dvui.label(@src(), "(Not Supported)", .{}, .{ .id_extra = i });
+        }
+
+        dvui.label(@src(), "{s}", .{m.manufacturer}, .{ .id_extra = i });
+        dvui.label(@src(), "{s}", .{if (m.supports_brightness) "Brightness Supported" else "Not Supported"}, .{ .id_extra = i });
+    }
+
+    // Bottom control panel (only if at least one selected)
+    var any_selected = false;
+    for (selected) |s| {
+        if (s)
+            any_selected = true;
+    }
+
+    if (any_selected) {
+        var panel = dvui.box(@src(), .{ .dir = .vertical }, .{ .style = .window, .expand = .horizontal });
+        defer panel.deinit();
+
+        dvui.label(@src(), "Control Panel", .{}, .{});
+
+        // Fraction value between 0.0 and 1.0
+        var brightness_fraction: f32 = global_brightness / 100.0;
+
+        // Brightness slider
+        dvui.label(@src(), "Brightness", .{}, .{});
+        if (dvui.slider(@src(), .{
+            .fraction = &brightness_fraction,
+            .dir = .horizontal,
+        }, .{})) {
+            // Map fraction back to 0–100
+            global_brightness = brightness_fraction * 100.0;
+
+            // Apply brightness to all selected monitors that support it
+            for (&monitorsDummyData, 0..) |*m, i| {
+                if (selected[i] and m.supports_brightness) {
+                    m.brightness = global_brightness;
+                }
+            }
+        }
+
+        // Feedback message
+        dvui.label(@src(), "Brightness applied to supported monitors.", .{}, .{});
+    }
 
     return .ok;
 }
